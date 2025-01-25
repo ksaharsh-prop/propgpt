@@ -72,49 +72,69 @@ def get_properties_from_db(price_range=None, location=None):
 #below is the response from groq
 ###############
 
+import random
+
+def get_random_user_agent():
+    user_agents = [
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.0.0 Safari/537.36",
+    ]
+    return random.choice(user_agents)
+
 def fetch_city_id(searchtxt):
     url = f"https://www.magicbricks.com/mbutility/homepageAutoSuggest?searchtxt={searchtxt}"
-    print("url",url)
-
+    
     headers = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Safari/537.36",
-    "Accept": "application/json, text/javascript, */*; q=0.01",
-    "X-Requested-With": "XMLHttpRequest",
-    "Referer": "https://www.magicbricks.com/",
-    "Accept-Language": "en-US,en;q=0.9",
-    "Connection": "keep-alive",  # Ensure persistent connection
-    "DNT": "1",  # Do Not Track header
-}
+        "User-Agent": get_random_user_agent(),
+        "Accept": "application/json, text/javascript, */*; q=0.01",
+        "X-Requested-With": "XMLHttpRequest",
+        "Referer": "https://www.magicbricks.com/",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Connection": "keep-alive",
+        "DNT": "1",
+        "Sec-Fetch-Dest": "empty",
+        "Sec-Fetch-Mode": "cors",
+        "Sec-Fetch-Site": "same-origin"
+    }
 
-    response = requests.get(url,headers=headers)
-    print("api_response",response)
-    if response.status_code == 200:
+    try:
+        response = requests.get(url, headers=headers, timeout=10)
+        response.raise_for_status()  # Raise an exception for bad status codes
+        
         data = response.json()
         for location in data.get('locationMap', {}).get('LOCATION', []):
             if location.get('result') == searchtxt:
                 return location.get('city')
+    except (requests.RequestException, ValueError) as e:
+        print(f"Error fetching city ID: {e}")
+    
     return None
-
 
 def fetch_property_data(cityId):
     url = f"https://www.magicbricks.com/mbsrp/suggestedProjectData?locid=undefined&cityId={cityId}&budgetMin=&budgetMax=&mainSrp=Y"
-    print("url",url)
-
+    
     headers = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Safari/537.36",
-    "Accept": "application/json, text/javascript, */*; q=0.01",
-    "X-Requested-With": "XMLHttpRequest",
-    "Referer": "https://www.magicbricks.com/",
-    "Accept-Language": "en-US,en;q=0.9",
-    "Connection": "keep-alive",  # Ensure persistent connection
-    "DNT": "1",  # Do Not Track header
-}
+        "User-Agent": get_random_user_agent(),
+        "Accept": "application/json, text/javascript, */*; q=0.01",
+        "X-Requested-With": "XMLHttpRequest",
+        "Referer": "https://www.magicbricks.com/",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Connection": "keep-alive",
+        "DNT": "1",
+        "Sec-Fetch-Dest": "empty",
+        "Sec-Fetch-Mode": "cors",
+        "Sec-Fetch-Site": "same-origin"
+    }
 
-    response = requests.get(url,headers=headers)
-    print("api_response",response)
-    if response.status_code == 200:
-        data = response.json()
-        return data 
+    try:
+        response = requests.get(url, headers=headers, timeout=10)
+        response.raise_for_status()
+        
+        return response.json()
+    except (requests.RequestException, ValueError) as e:
+        print(f"Error fetching property data: {e}")
+    
     return None
 
 # Function to extract price and location using Ollama model
