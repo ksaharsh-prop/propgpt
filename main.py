@@ -140,22 +140,23 @@ async def chatbot(query: Optional[str] = None):
 
         # Extract price and location using Ollama
         response= extract_property_details(query)
-        final_response=response["projectsCards"][:2]
-        final_dict={}
-        final_list=[]
-        for prop in final_response:
-            
-            final_dict["lmtDName"]=prop["lmtDName"]
-            final_dict["minPriceDesc"]=prop["minPriceDesc"]
-            final_dict["maxPriceDesc"]=prop["maxPriceDesc"]
-            final_dict["imageUrl"]=prop["imageUrl"]
-            print(final_dict)
-            final_list.append(final_dict)
         
-        print(final_list)    
         # response["projectsCards"].pop("amenitiesDisp")
         if "projectsCards" in response:
             
+            final_response=response["projectsCards"][:2]
+            final_dict={}
+            final_list=[]
+            for prop in final_response:
+                
+                final_dict["lmtDName"]=prop["lmtDName"]
+                final_dict["minPriceDesc"]=prop["minPriceDesc"]
+                final_dict["maxPriceDesc"]=prop["maxPriceDesc"]
+                final_dict["imageUrl"]=prop["imageUrl"]
+                print(final_dict)
+                final_list.append(final_dict)
+            
+            print(final_list)    
             return {
             "message": "",
             "properties": final_list
