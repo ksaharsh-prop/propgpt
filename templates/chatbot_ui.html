@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PropGPT</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f5f5f5;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .chat-container {
+            width: 100%;
+            max-width: 1200px;
+            height: 100%;
+            background-color: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .chat-header {
+            background-color: #2d87f0;
+            color: white;
+            padding: 20px;
+            font-size: 26px;
+            font-weight: bold;
+            text-align: center;
+        }
+
+        .chat-box {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            background-color: #f9f9f9;
+        }
+
+        .message {
+            padding: 14px 18px;
+            border-radius: 16px;
+            font-size: 18px;
+            max-width: 70%;
+            word-wrap: break-word;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+            line-height: 1.5;
+        }
+
+        .user-message {
+            background-color: #d4edff;
+            align-self: flex-end;
+        }
+
+        .bot-message {
+            background-color: #f1f1f1;
+            align-self: flex-start;
+        }
+
+        .input-container {
+            display: flex;
+            align-items: center;
+            padding: 20px;
+            background-color: white;
+            border-top: 1px solid #ddd;
+        }
+
+        .input-box {
+            flex: 1;
+            padding: 14px;
+            font-size: 16px;
+            border: 1px solid #ddd;
+            border-radius: 25px;
+            outline: none;
+            transition: all 0.3s ease-in-out;
+        }
+
+        .input-box:focus {
+            border-color: #2d87f0;
+            box-shadow: 0 0 5px rgba(45, 135, 240, 0.5);
+        }
+
+        .send-button {
+            padding: 14px 20px;
+            margin-left: 15px;
+            background-color: #2d87f0;
+            color: white;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            transition: background-color 0.3s ease;
+        }
+
+        .send-button:hover {
+            background-color: #1e6cbf;
+        }
+
+        .send-button:active {
+            background-color: #1a5e9b;
+        }
+
+        .chat-box::-webkit-scrollbar {
+            width: 10px;
+        }
+
+        .chat-box::-webkit-scrollbar-thumb {
+            background-color: #bbb;
+            border-radius: 5px;
+        }
+
+        .chat-box::-webkit-scrollbar-thumb:hover {
+            background-color: #888;
+        }
+
+        .property-listing {
+            font-size: 16px;
+            margin-top: 10px;
+            padding: 15px;
+            background-color: #eef9ef;
+            border-left: 4px solid #4caf50;
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .property-listing img {
+            max-width: 100%;
+            border-radius: 8px;
+            margin-bottom: 8px;
+        }
+
+        .property-detail {
+            display: flex;
+            justify-content: space-between;
+            flex-wrap: wrap;
+        }
+
+        .property-detail > div {
+            margin-bottom: 5px;
+            flex-basis: calc(33.33% - 10px);
+        }
+
+        .property-detail span {
+            font-weight: bold;
+        }
+
+        .loading-indicator {
+            align-self: flex-start;
+            background-color: #f1f1f1;
+            padding: 10px 15px;
+            border-radius: 16px;
+            font-style: italic;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+<div class="chat-container">
+    <div class="chat-header">PropGPT</div>
+    <div id="chat-box" class="chat-box">
+        <!-- Chat messages will appear here -->
+    </div>
+    <div class="input-container">
+        <input id="user-input" type="text" class="input-box" placeholder="Ask about properties..." />
+        <button class="send-button" onclick="sendQuery()">Send</button>
+    </div>
+</div>
+<script>
+    function displayMessage(message, isUser) {
+        const chatBox = document.getElementById('chat-box');
+        const messageDiv = document.createElement('div');
+        messageDiv.classList.add('message');
+        if (isUser) {
+            messageDiv.classList.add('user-message');
+        } else {
+            messageDiv.classList.add('bot-message');
+        }
+        messageDiv.textContent = message;
+        chatBox.appendChild(messageDiv);
+        chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    function displayLoadingIndicator() {
+        const chatBox = document.getElementById('chat-box');
+        const loadingDiv = document.createElement('div');
+        loadingDiv.classList.add('message', 'bot-message', 'loading-indicator');
+        loadingDiv.textContent = 'Typing...';
+        chatBox.appendChild(loadingDiv);
+        chatBox.scrollTop = chatBox.scrollHeight;
+        return loadingDiv;
+    }
+
+    function displayProperty(properties) {
+        const chatBox = document.getElementById('chat-box');
+        for (let prop of properties) {
+            const propDiv = document.createElement('div');
+            propDiv.classList.add('property-listing');
+    
+            propDiv.innerHTML = `
+                ${prop.thumbnailImage ? `<img src="${prop.imageUrl}" alt="Property Image">` : ''}
+            
+                <div><span>Location:</span> ${prop.lmtDName}, </div>
+               
+                <a href="${prop.detailUrl}" target="_blank">View Details</a>
+            `;
+            chatBox.appendChild(propDiv);
+        }
+        chatBox.scrollTop = chatBox.scrollHeight;
+    }
+    async function sendQuery() {
+        const userInput = document.getElementById('user-input');
+        const query = userInput.value;
+        if (!query) return;
+
+        displayMessage(query, true);
+        userInput.value = '';
+
+        const loadingIndicator = displayLoadingIndicator();
+
+        try {
+            const response = await fetch('/chatbot/?query=' + encodeURIComponent(query), {
+                method: 'POST',
+            });
+            const data = await response.json();
+
+            // Remove loading indicator
+            loadingIndicator.remove();
+
+            if (data.message) {
+                displayMessage(data.message, false);
+            }
+
+            console.log(data.properties)
+            if (data.properties) {
+                displayProperty(data.properties);
+            }
+        } catch (error) {
+            // Remove loading indicator
+            loadingIndicator.remove();
+            displayMessage('Sorry, there was an error processing your request.', false);
+            console.error('Error:', error);
+        }
+    }
+
+    // Add Enter key functionality
+    document.getElementById('user-input').addEventListener('keydown', function(event) {
+        if (event.key === 'Enter') {
+            sendQuery();
+        }
+    });
+</script>
+</body>
+</html>
