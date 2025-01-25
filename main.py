@@ -82,7 +82,10 @@ def fetch_city_id(searchtxt):
     "X-Requested-With": "XMLHttpRequest",
     "Referer": "https://www.magicbricks.com/",
     "Accept-Language": "en-US,en;q=0.9",
+    "Connection": "keep-alive",  # Ensure persistent connection
+    "DNT": "1",  # Do Not Track header
 }
+
     response = requests.get(url,headers=headers)
     print("api_response",response)
     if response.status_code == 200:
@@ -103,7 +106,10 @@ def fetch_property_data(cityId):
     "X-Requested-With": "XMLHttpRequest",
     "Referer": "https://www.magicbricks.com/",
     "Accept-Language": "en-US,en;q=0.9",
+    "Connection": "keep-alive",  # Ensure persistent connection
+    "DNT": "1",  # Do Not Track header
 }
+
     response = requests.get(url,headers=headers)
     print("api_response",response)
     if response.status_code == 200:
