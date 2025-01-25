@@ -1,13 +1,22 @@
 from fastapi import FastAPI, Request
 from fastapi.templating import Jinja2Templates
-from fastapi.middleware.cors import CORSMiddleware  # CORS middleware
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import mysql.connector
 from typing import List, Optional
 import uvicorn
 from groqmodel import query_groq_api_city
 import requests
+import logging
+import random
+import traceback
 
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 # FastAPI instance
 app = FastAPI()
@@ -15,200 +24,194 @@ app = FastAPI()
 # Initialize Jinja2 templates
 templates = Jinja2Templates(directory="templates")
 
-# Allow CORS for frontend interaction (you can adjust origins for more security)
+# CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Can be specific origins like ["http://localhost:3000"]
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-
-# Database connection settings (adjust these to your MySQL setup)
+# Database connection settings
 DB_HOST = "localhost"
 DB_USER = "root"
 DB_PASSWORD = "1234"
 DB_NAME = "property_db"
 
-# Create a Pydantic model to represent property data
+# User Agent pool
+USER_AGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Safari/537.36"
+]
+
+# Property model
 class Property(BaseModel):
     owner_name: str
     location: str
     price: float
 
-# Database query function to get properties from MySQL
-def get_properties_from_db(price_range=None, location=None):
-    query = '''SELECT owner_name, location, price FROM property_listing WHERE 1=1'''
-    params = []
-
-    # Add filters to query based on user input
-    if price_range:
-        query += ''' AND price <= %s '''
-        params.append(float(price_range))
-    if location:
-        query += ''' AND (location LIKE %s) '''
-        params.append(location)
-
-    # Connect to the MySQL database
-    connection = mysql.connector.connect(
-        host=DB_HOST,
-        user=DB_USER,
-        password=DB_PASSWORD,
-        database=DB_NAME
-    )
-
-    cursor = connection.cursor(dictionary=True)
-    cursor.execute(query, tuple(params))
-    result = cursor.fetchall()
-
-    cursor.close()
-    connection.close()
-
-    # Return the properties as a list of Pydantic models
-    return [Property(owner_name=prop['owner_name'], location=prop['location'], price=prop['price']) for prop in result]
-###############################
-#############################
-#below is the response from groq
-###############
-
-import random
-
-def get_random_user_agent():
-    user_agents = [
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.0.0 Safari/537.36",
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.0.0 Safari/537.36",
-        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.0.0 Safari/537.36",
-    ]
-    return random.choice(user_agents)
-
+# Enhanced fetch_city_id function
 def fetch_city_id(searchtxt):
-    url = f"https://www.magicbricks.com/mbutility/homepageAutoSuggest?searchtxt={searchtxt}"
-    
-    headers = {
-        "User-Agent": get_random_user_agent(),
-        "Accept": "application/json, text/javascript, */*; q=0.01",
-        "X-Requested-With": "XMLHttpRequest",
-        "Referer": "https://www.magicbricks.com/",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Connection": "keep-alive",
-        "DNT": "1",
-        "Sec-Fetch-Dest": "empty",
-        "Sec-Fetch-Mode": "cors",
-        "Sec-Fetch-Site": "same-origin"
-    }
-
     try:
-        response = requests.get(url, headers=headers, timeout=10)
-        response.raise_for_status()  # Raise an exception for bad status codes
+        url = f"https://www.magicbricks.com/mbutility/homepageAutoSuggest?searchtxt={searchtxt}"
         
+        headers = {
+            "User-Agent": random.choice(USER_AGENTS),
+            "Accept": "application/json, text/javascript, */*; q=0.01",
+            "X-Requested-With": "XMLHttpRequest",
+            "Referer": "https://www.magicbricks.com/",
+            "Accept-Language": "en-US,en;q=0.9",
+        }
+        
+        logger.info(f"Fetching city ID for: {searchtxt}")
+        logger.info(f"Full URL: {url}")
+        
+        response = requests.get(
+            url, 
+            headers=headers, 
+            timeout=15,  # Increased timeout
+        )
+        
+        logger.info(f"Response Status: {response.status_code}")
+        
+        # Log response content for debugging
+        logger.debug(f"Response Content: {response.text}")
+        
+        response.raise_for_status()
         data = response.json()
+        
         for location in data.get('locationMap', {}).get('LOCATION', []):
             if location.get('result') == searchtxt:
                 return location.get('city')
-    except (requests.RequestException, ValueError) as e:
-        print(f"Error fetching city ID: {e}")
+        
+        logger.warning(f"No city found for: {searchtxt}")
+        return None
     
-    return None
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Network error fetching city ID: {e}")
+        logger.error(traceback.format_exc())
+        return None
+    except ValueError as e:
+        logger.error(f"JSON parsing error: {e}")
+        logger.error(traceback.format_exc())
+        return None
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}")
+        logger.error(traceback.format_exc())
+        return None
 
+# Enhanced fetch_property_data function
 def fetch_property_data(cityId):
-    url = f"https://www.magicbricks.com/mbsrp/suggestedProjectData?locid=undefined&cityId={cityId}&budgetMin=&budgetMax=&mainSrp=Y"
-    
-    headers = {
-        "User-Agent": get_random_user_agent(),
-        "Accept": "application/json, text/javascript, */*; q=0.01",
-        "X-Requested-With": "XMLHttpRequest",
-        "Referer": "https://www.magicbricks.com/",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Connection": "keep-alive",
-        "DNT": "1",
-        "Sec-Fetch-Dest": "empty",
-        "Sec-Fetch-Mode": "cors",
-        "Sec-Fetch-Site": "same-origin"
-    }
-
     try:
-        response = requests.get(url, headers=headers, timeout=10)
+        url = f"https://www.magicbricks.com/mbsrp/suggestedProjectData?locid=undefined&cityId={cityId}&budgetMin=&budgetMax=&mainSrp=Y"
+        
+        headers = {
+            "User-Agent": random.choice(USER_AGENTS),
+            "Accept": "application/json, text/javascript, */*; q=0.01",
+            "X-Requested-With": "XMLHttpRequest",
+            "Referer": "https://www.magicbricks.com/",
+            "Accept-Language": "en-US,en;q=0.9",
+        }
+        
+        logger.info(f"Fetching property data for city ID: {cityId}")
+        logger.info(f"Full URL: {url}")
+        
+        response = requests.get(
+            url, 
+            headers=headers, 
+            timeout=15  # Increased timeout
+        )
+        
+        logger.info(f"Response Status: {response.status_code}")
+        
+        # Log response content for debugging
+        logger.debug(f"Response Content: {response.text}")
+        
         response.raise_for_status()
-        
         return response.json()
-    except (requests.RequestException, ValueError) as e:
-        print(f"Error fetching property data: {e}")
     
-    return None
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Network error fetching property data: {e}")
+        logger.error(traceback.format_exc())
+        return None
+    except ValueError as e:
+        logger.error(f"JSON parsing error: {e}")
+        logger.error(traceback.format_exc())
+        return None
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}")
+        logger.error(traceback.format_exc())
+        return None
 
-# Function to extract price and location using Ollama model
+# Extract property details
 def extract_property_details(query: str):
-    
-    response = query_groq_api_city(query)
-    print("response",response)
-    cityId=fetch_city_id(response)
-    if cityId:
+    try:
+        response = query_groq_api_city(query)
+        logger.info(f"Groq API response: {response}")
         
+        cityId = fetch_city_id(response)
+        logger.info(f"Fetched City ID: {cityId}")
         
-        final_response=fetch_property_data(cityId)
-        print("final_response",final_response)
-    else:
-         final_response=response   
-    return final_response
+        if cityId:
+            final_response = fetch_property_data(cityId)
+        else:
+            final_response = response
+        
+        return final_response
+    except Exception as e:
+        logger.error(f"Error in extract_property_details: {e}")
+        logger.error(traceback.format_exc())
+        return None
 
-# Endpoint for the chatbot interaction
+# Chatbot UI endpoint
 @app.get("/")
 async def chatbot_ui(request: Request):
     return templates.TemplateResponse("chatbot_ui.html", {"request": request})
 
-# Endpoint to process the user's query
+# Chatbot endpoint
 @app.post("/chatbot/")
 async def chatbot(query: Optional[str] = None):
-    if query:
-        # Debug: Print the received query to ensure it's arriving correctly
-        print("Received query:", query)
-
-        # Extract price and location using Ollama
-        response= extract_property_details(query)
+    if not query:
+        return {"message": "Please provide a query with price or location to get property suggestions."}
+    
+    try:
+        logger.info(f"Received query: {query}")
         
-        # response["projectsCards"].pop("amenitiesDisp")
-        if "projectsCards" in response:
+        response = extract_property_details(query)
+        
+        if response and "projectsCards" in response:
+            final_response = response["projectsCards"][:2]
+            final_list = []
             
-            final_response=response["projectsCards"][:2]
-            final_dict={}
-            final_list=[]
             for prop in final_response:
-                
-                final_dict["lmtDName"]=prop["lmtDName"]
-                final_dict["minPriceDesc"]=prop["minPriceDesc"]
-                final_dict["maxPriceDesc"]=prop["maxPriceDesc"]
-                final_dict["imageUrl"]=prop["imageUrl"]
-                print(final_dict)
+                final_dict = {
+                    "lmtDName": prop.get("lmtDName", ""),
+                    "minPriceDesc": prop.get("minPriceDesc", ""),
+                    "maxPriceDesc": prop.get("maxPriceDesc", ""),
+                    "imageUrl": prop.get("imageUrl", "")
+                }
                 final_list.append(final_dict)
             
-            print(final_list)    
             return {
-            "message": "",
-            "properties": final_list
-        }
-        # If price and location are found, query the database
-        # if price and location:
-        #     properties = get_properties_from_db(price_range=price, location=location)
-        #     return {
-        #         "message": f"Here are the properties based on your query: {query}",
-        #         "properties": properties
-        #     }
-        # elif price or location:
-        #     properties = get_properties_from_db(price_range=price, location=location)
-        #     return {
-        #         "message": f"Here are the properties based on the extracted details: {query}",
-        #         "properties": properties
-        #     }
+                "message": "",
+                "properties": final_list
+            }
         else:
-        
             return {
-                "message": f"{response}",
+                "message": str(response),
                 "properties": []
             }
-    else:
-        return {"message": "Please provide a query with price or location to get property suggestions."}
+    
+    except Exception as e:
+        logger.error(f"Unexpected error in chatbot endpoint: {e}")
+        logger.error(traceback.format_exc())
+        return {
+            "message": f"An error occurred: {str(e)}",
+            "properties": []
+        }
 
-# Main entry point to run the application
+# Main entry point
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
